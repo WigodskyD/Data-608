@@ -1,0 +1,141 @@
+---
+title: "Data608_assignment_1"
+author: "Dan Wigodsky"
+date: "August 27, 2018"
+output: html_document
+---
+<body style="background: 
+linear-gradient(13deg, #e5e2d3 13%, transparent 43%) 3px 0, linear-gradient(63deg, transparent 24%, #e5e2d3 28%),linear-gradient(63deg, transparent 33%, #d0ecf2 29%, #f2f0e8 18%, transparent 71%), #f2f0e8;background-size: 7px 5px;">
+
+<h1><center>.</h1></center>  
+<h1><span style="color:#1f5aba"><font face="garamond"><b><center>Principles of Data Visualization  
+and Introduction to ggplot2</h1></b></center>  
+<h1><center>.</h1></center>  
+<h1><center>.</h1></center>  
+
+##"I have provided you with data about the 5,000 fastest growing companies in the US, as compiled by Inc. magazine."
+
+<h3>Create 3 graphs showing:  
+-the distribution of companies in the dataset by State  
+-how many people are employed by companies in different industries in the state with the 3rd most companies in the data set  
+-which industries generate the most revenue per employee.  
+-Graphs 2 and 3 should show the distribution per industry 
+</h3>
+
+.  
+.  
+.  
+
+### Graph 1: Number of companies by state in Inc.'s fastest growing companies 
+```{r  state-set, fig.width=5.5, fig.height=7.5, echo=FALSE}
+suppressWarnings(suppressMessages(library(dplyr)))
+suppressWarnings(suppressMessages(library(ggplot2)))
+suppressWarnings(suppressMessages(library(ggiraph)))
+
+inc <- read.csv("https://raw.githubusercontent.com/charleyferrari/CUNY_DATA_608/master/module1/Data/inc5000_data.csv", header= TRUE)
+inc<-inc[complete.cases(inc),]
+
+inc   %>%
+    count(State) -> inc.state
+
+title.color <- element_text(face = "bold.italic", color = '#379e9a',size=18)
+ggplot(data=inc.state, aes(x=reorder(State,n),y=n)) + geom_bar(stat='identity',fill='#a0e5d1') +coord_flip()+ theme(panel.background = element_rect(fill = '#babab0'))+labs(x='State', y='Number of Companies')+ theme(title = title.color)+ 
+    geom_text(aes(label=n), vjust=.3,hjust=-.3,color='white')+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ylim(0, 750)
+```  
+  
+### Graph 2:  To create a graph showing distribution of employees by industry, the first thought is to create boxplots.  Boxplots, in this dataset, mask the true distribution of the companies.  A look at 'Environmental Services' shows the problem.  While only 2 companies are in the New York dataset, boxplots make it appear that there may be far more.
+
+```{r  new-york-set, fig.width=9, fig.height=5,echo=FALSE,message=FALSE}
+inc  %>% 
+   filter(State=='NY')  ->inc.new_york
+inc.new_york<-inc.new_york[complete.cases(inc.new_york),]
+
+
+inc.new_york %>% 
+  group_by(Industry) %>% 
+  mutate(firstquart=quantile(Employees, prob = 0.25,na.rm=TRUE))->inc.new_york.quarts
+inc.new_york.quarts %>% 
+  group_by(Industry) %>% 
+  mutate(median_by_ind=quantile(Employees, prob = 0.5,na.rm=TRUE))->inc.new_york.quarts
+inc.new_york.quarts %>% 
+  group_by(Industry) %>% 
+  mutate(thirdquart=quantile(Employees, prob = 0.75,na.rm=TRUE))->inc.new_york.quarts
+inc.new_york.quarts %>% 
+  group_by(Industry) %>% 
+  mutate(outliers=firstquart + 2.5 * (thirdquart - firstquart))->inc.new_york.quarts
+inc.new_york.quarts %>% 
+  filter(Industry=='Environmental Services')
+inc.new_york.quarts %>% 
+  filter(Employees<outliers)->inc.new_york.quarts
+inc.new_york.quarts %>% 
+  group_by(Industry) %>% 
+  select(median_by_ind)->median_line_setter
+median_line_setter<-distinct(median_line_setter,median_by_ind)
+median_line_setter %>% 
+  arrange(Industry)->median_line_setter
+
+#outliers_gone<-inc.new_york[which(inc.new_york$Employees<950),]
+ggplot(data = inc.new_york.quarts, aes(x=Industry, y=Employees)) + geom_boxplot()+ theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```  
+
+### To solve the problem, we chose a scatterplot facet wrap with medians denoted by a line.  To eliminate outliers, we eliminated values that would appear above the whiskers of a standard boxplot for each facet.  
+
+```{r  new-york-ggplot-set, fig.width=16, fig.height=8,echo=FALSE}
+ggplot(data = inc.new_york.quarts, aes(x=seq(), y=Employees,color=Industry)) + geom_point(show.legend = FALSE,size=12,shape='-',aes(color=Industry))+ theme(axis.text.x = element_text(angle = 60, hjust = 1))+ facet_wrap( ~ Industry,nrow=3 )+theme(strip.text.x = element_text(size=8, angle=330,color='#0c367a'),strip.background = element_rect( fill="white")) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),axis.text.x=element_blank(),axis.title.y = element_text(color="#0c367a", size=14, face="bold"),axis.ticks.x=element_blank(),panel.background = element_rect(fill = '#f8ffd8'))+labs(x="") +geom_hline(data=median_line_setter[,1],aes(yintercept = median_line_setter[,2]))
+```
+
+### Graph 3: To create an interactive graph showing the top industries in terms of revenue per employee, which contains distribution information, we created a new variable called the profitability variance ratio. Based on the Sharpe ratio, it measures amount of excess return per worker per standard deviation.  We ordered our industries by this new ratio.  An interactive tooltip shows revenue per employee, profitability variance ratio and the top company in each industry, by revenue per employee.  
+
+### Ultimately, this is not a good measure for investment.  We returned a lot of companies with high costs and complicated machinery.  A better measure would have been based on profit ratios.  Our average revenue per employee was based on industry totals, yielding an employee-weighted measure instead of a possible company-weighted average.  An investor should be cognizant of the size of company he or she is considering for investment.
+
+```{r  revenue-per-employee-set,echo=FALSE,warning=FALSE,message=FALSE}
+inc<-inc[complete.cases(inc),]
+inc %>% 
+  group_by(Industry) %>% 
+  summarize(total_rev=sum(Revenue),total_emp=sum(Employees))->rev_per_emp_data
+#rev_per_emp_data  %>% 
+#  mutate (ratio_rpe= total_rev/total_emp) %>% 
+#  top_n(10)->rev_per_emp_data_top 
+
+
+inc %>% 
+  mutate(rev_ratio_b = round(Revenue/Employees,digits=0))->inc.tooltip.1
+inc.tooltip.1<-inc.tooltip.1[,c(2,5,9)]
+inc.tooltip.1 %>% 
+  group_by(Industry) %>% 
+  top_n(n=1,wt=rev_ratio_b)->inc.tooltip.1
+rev_per_emp_data %>% 
+  left_join(inc.tooltip.1)->rev_per_emp_data
+
+inc %>% 
+  mutate(rev_ratio_b = round(Revenue/Employees,digits=0))->inc.tooltip.2
+
+overall_ave_profit_per_employee<-mean(inc.tooltip.2$rev_ratio_b)
+# Based on the Sharpe Ratio, and using our revenue per employee data, we create a measure of profitability scaled by variance.  
+# One way it differs from the Sharpe Ratio is it doesn't use growth rates.
+
+inc.tooltip.2 %>% 
+  group_by(Industry) %>% 
+  summarize (profitability_variance_factor= ((mean(rev_ratio_b)-overall_ave_profit_per_employee)  /sd(rev_ratio_b)))->inc.tooltip.2
+rev_per_emp_data %>% 
+  left_join(inc.tooltip.2)->rev_per_emp_data
+
+str_model <- paste0("<tr><td>revenue per employee</td><td>$%s</td></tr>", 
+  "<tr><td>profitability variance ratio  ......    </td><td>%s</td></tr>", 
+  "<tr><td>top company</td><td>%s</td></tr>")
+rev_per_emp_data$tooltip <- sprintf(str_model, rev_per_emp_data$rev_ratio_b, 
+                            rev_per_emp_data$profitability_variance_factor, rev_per_emp_data$Name )
+rev_per_emp_data$tooltip <- paste0( "<table>", 
+                            rev_per_emp_data$tooltip, "</table>" )
+
+rev_per_emp_data  %>% 
+  mutate (ratio_rpe= total_rev/total_emp)%>% 
+  top_n(10)->rev_per_emp_data
+
+giraph_plot<-ggplot(data=rev_per_emp_data)+ geom_point(aes(x=reorder(Industry,-profitability_variance_factor), y=ratio_rpe),fill='#69d2e7',size=16,alpha=.7,shape=25,color='blue')+ theme(axis.text.x = element_text(angle = 40, hjust = 1)) + labs(title = 'Industries with the Most Revenue per Employee',subtitle='ordered by profitability variance ratio' ,x='',y='Dollars per Employee')+theme(title = element_text(size=26,color = '#FA6900'),plot.subtitle = element_text(size=26,color = '#f4ba7c'),axis.title.y = element_text(size=28,color = '#a7dbd8',hjust=.99,vjust=.2),axis.text = element_text(size=14,color = '#F38630')) + theme(panel.background = element_rect(fill = '#e0e4cc'))+ylim(90000,1280000)
+
+tooltip_css <- "background-color:#2cb0b7;color:white;font-style:italic;padding:7px;"
+giraph_plot<-giraph_plot+geom_point_interactive(aes(x=reorder(Industry,-ratio_rpe), y=ratio_rpe, data_id=ratio_rpe,tooltip=tooltip,label=ratio_rpe),fill='#69d2e7',color='#69d2e7',size=9,alpha=.2,shape=25)
+ggiraph(code = print(giraph_plot),hover_css = "fill:'white';font-style:italic;" ,tooltip_extra_css = tooltip_css,width_svg = 12.5, height_svg = 8.5)
+```
+Code to set up a tooltip with multiple values comes from: https://davidgohel.github.io/ggiraph/articles/offcran/examples.html
