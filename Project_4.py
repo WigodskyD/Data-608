@@ -6,7 +6,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 app = dash.Dash('TheApp')
 server = app.server
-
+''''This is a dash app built using the 2015 New York City tree census database.  The app shows 
+two graphs that are interactive.  Based on the options chosen by the user, a new query is made to the website.  That 
+allows for faster implementation because data is filtered by the database before query results are delivered and the local computer
+doesn't have to hold on to or manipulate a lot of data.  This method is great for live data that is being updated regularly.'''
 
 
 url = 'https://data.cityofnewyork.us/resource/nwxe-4ae8.json'
